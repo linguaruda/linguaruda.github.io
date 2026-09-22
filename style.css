@@ -362,9 +362,12 @@ img { max-width: 100%; display: block; }
   margin: 0 auto;
   /* A lib (page-flip) tem um bug conhecido e sem correção oficial de "auto
      scroll" da página ao virar no mobile (github.com/Nodlik/StPageFlip issue
-     #38). `touch-action: pan-y` evita que o gesto de arrastar pra virar a
-     página compita com o gesto nativo de rolar a tela verticalmente. */
-  touch-action: pan-y;
+     #38). `touch-action: none` bloqueia qualquer gesto nativo do navegador
+     nessa área (inclusive rolagem) — o toque nesse elemento só é tratado via
+     JS (nosso preventDefault em script.js + a própria lib). Só CSS sozinho
+     não resolveu (testado em celular real): o navegador ainda começava a
+     rolar antes da lib reagir. */
+  touch-action: none;
   overflow-anchor: none;
 }
 

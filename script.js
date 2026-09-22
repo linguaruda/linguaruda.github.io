@@ -158,6 +158,13 @@
     var container = document.getElementById('flipbook');
     if (!container || !window.St) return;
 
+    // A própria lib deveria evitar que o toque no livro role a página
+    // (mobileScrollSupport, ligado por padrão), mas isso tem um bug conhecido
+    // e sem correção (github.com/Nodlik/StPageFlip issue #38): o navegador
+    // chega a começar a rolar antes da lib reagir ao gesto. Bloqueamos a
+    // rolagem nativa por conta própria, direto no touchmove, como reforço.
+    container.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
+
     // Largura útil da página (a mesma coluna de conteúdo, até 480px), calculada
     // aqui em vez de deixar a lib decidir — evita que ela escolha um tamanho
     // maior que a tela disponível (causa overflow horizontal).
