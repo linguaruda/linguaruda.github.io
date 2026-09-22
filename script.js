@@ -3,11 +3,7 @@
 
   var API_BASE_URL = 'https://script.google.com/macros/s/AKfycbxIsIQJOmZfvFm11FKBgbQ6ZUPk4QQbFmZzbA2jkIvKnDFXrZBF_cfnsQPDUwmKwL8w/exec';
 
-  // TODO: criar uma propriedade GA4 (analytics.google.com) e colar o Measurement ID aqui.
-  // Sem isso, os eventos abaixo continuam sendo espelhados na planilha (os que
-  // estão na lista EVENTOS_PARA_PLANILHA), mas os detalhes ricos (device info,
-  // tempo por seção, cada virada de página) só existem de fato dentro do GA4.
-  var GA4_ID = 'G-XXXXXXXXXX';
+  var GA4_ID = 'G-DQ5309P9RR';
 
   // Só esses eventos viram uma linha na planilha "Linguaruda - Eventos" — os
   // demais (mais frequentes/granulares) vão só para o GA4, que foi feito pra
