@@ -360,10 +360,17 @@ img { max-width: 100%; display: block; }
   justify-content: center;
   position: relative;
   margin: 0 auto;
+  /* A lib (page-flip) tem um bug conhecido e sem correção oficial de "auto
+     scroll" da página ao virar no mobile (github.com/Nodlik/StPageFlip issue
+     #38). `touch-action: pan-y` evita que o gesto de arrastar pra virar a
+     página compita com o gesto nativo de rolar a tela verticalmente. */
+  touch-action: pan-y;
+  overflow-anchor: none;
 }
 
 #flipbook {
   max-width: 100%;
+  overflow-anchor: none;
 }
 
 .flipbook-pagina {
@@ -374,6 +381,11 @@ img { max-width: 100%; display: block; }
   line-height: 1.6;
   overflow-y: auto;
   overflow-x: hidden;
+  /* A paginação injeta/reordena páginas dinamicamente; sem isso, o navegador
+     às vezes tenta "corrigir" a posição de rolagem sozinho quando esse
+     conteúdo muda de tamanho fora da tela — é essa correção que aparece como
+     "a página rola sozinha". */
+  overflow-anchor: none;
 }
 
 .flipbook-pagina--capa {
