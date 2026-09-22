@@ -1,14 +1,20 @@
 (function () {
   'use strict';
 
-  // TODO: confirmar se essa é a URL de deployment correta assim que o clasp
-  // estiver autenticado com a conta certa (luishenrybra@gmail.com).
   var API_BASE_URL = 'https://script.google.com/macros/s/AKfycbxIsIQJOmZfvFm11FKBgbQ6ZUPk4QQbFmZzbA2jkIvKnDFXrZBF_cfnsQPDUwmKwL8w/exec';
 
   // TODO: criar uma propriedade GA4 (analytics.google.com) e colar o Measurement ID aqui.
+  // Sem isso, os eventos abaixo continuam sendo espelhados na planilha (os que
+  // estão na lista EVENTOS_PARA_PLANILHA), mas os detalhes ricos (device info,
+  // tempo por seção, cada virada de página) só existem de fato dentro do GA4.
   var GA4_ID = 'G-XXXXXXXXXX';
 
-  // ---------- Analytics (GA4 + espelho na planilha) ----------
+  // Só esses eventos viram uma linha na planilha "Linguaruda - Eventos" — os
+  // demais (mais frequentes/granulares) vão só para o GA4, que foi feito pra
+  // esse volume. Ajuste essa lista se quiser ver mais coisa direto na planilha.
+  var EVENTOS_PARA_PLANILHA = ['whatsapp_click', 'chronicle_open', 'chronicle_completed', 'device_info'];
+
+  // ---------- Analytics (GA4 + espelho seletivo na planilha) ----------
   function iniciarGA4() {
     if (!GA4_ID || GA4_ID.indexOf('XXXX') !== -1) return;
     var s = document.createElement('script');
@@ -21,8 +27,15 @@
     gtag('config', GA4_ID);
   }
 
-  function track(nome, detalhe) {
-    if (window.gtag) gtag('event', nome, { detalhe: detalhe || '' });
+  // `extra` são parâmetros adicionais estruturados, só pro GA4 (a planilha só
+  // guarda o texto plano de `detalhe`, uma coluna só).
+  function track(nome, detalhe, extra) {
+    if (window.gtag) {
+      var params = { detalhe: detalhe || '' };
+      if (extra) { for (var k in extra) { params[k] = extra[k]; } }
+      gtag('event', nome, params);
+    }
+    if (EVENTOS_PARA_PLANILHA.indexOf(nome) === -1) return;
     // Fogo-e-esqueço: não precisamos ler a resposta, então `no-cors` evita
     // qualquer dependência de CORS estar configurado no lado do Apps Script.
     var url = API_BASE_URL + '?action=log&evento=' + encodeURIComponent(nome) + '&detalhe=' + encodeURIComponent(detalhe || '');
@@ -190,12 +203,17 @@
     var abriu = false;
     var terminou = false;
 
+    var paginaAnterior = 1;
     pageFlip.on('flip', function (e) {
       var atual = e.data + 1;
       document.getElementById('pagina-atual').textContent = atual;
       esconderDicaArrastar();
 
       if (!abriu) { abriu = true; track('chronicle_open'); }
+      track('chronicle_page_turn', 'pagina ' + atual + ' de ' + total, {
+        pagina: atual, total_paginas: total, direcao: atual > paginaAnterior ? 'avancar' : 'voltar'
+      });
+      paginaAnterior = atual;
       if (!terminou && atual >= total) { terminou = true; track('chronicle_completed'); }
     });
   }
@@ -321,10 +339,98 @@
       botao.addEventListener('click', function () {
         var item = botao.closest('.faq-item');
         var aberto = item.getAttribute('data-aberto') === 'true';
-        item.setAttribute('data-aberto', aberto ? 'false' : 'true');
-        botao.setAttribute('aria-expanded', aberto ? 'false' : 'true');
+        var novoEstado = !aberto;
+        item.setAttribute('data-aberto', novoEstado ? 'true' : 'false');
+        botao.setAttribute('aria-expanded', novoEstado ? 'true' : 'false');
+        var pergunta = botao.textContent.replace(/\+\s*$/, '').replace(/\s+/g, ' ').trim();
+        track('faq_toggle', pergunta + ' — ' + (novoEstado ? 'abriu' : 'fechou'), {
+          pergunta: pergunta, aberto: novoEstado
+        });
       });
     });
+  }
+
+  // ---------- Tempo de permanência por seção ----------
+  // Mede quanto tempo cada <section data-secao-nome> fica pelo menos 50%
+  // visível na tela e manda o total acumulado quando a aba é minimizada/
+  // fechada/trocada. Usamos `visibilitychange` (não `beforeunload`) porque é
+  // o único gatilho confiável em mobile (Safari/iOS não dispara beforeunload
+  // de forma consistente).
+  function iniciarTempoPorSecao() {
+    var secoes = document.querySelectorAll('[data-secao-nome]');
+    if (!secoes.length || !window.IntersectionObserver) return;
+    var estado = {};
+    secoes.forEach(function (s) {
+      estado[s.getAttribute('data-secao-nome')] = { inicio: null, acumulado: 0 };
+    });
+
+    var observer = new IntersectionObserver(function (entradas) {
+      entradas.forEach(function (entrada) {
+        var nome = entrada.target.getAttribute('data-secao-nome');
+        var e = estado[nome];
+        if (entrada.isIntersecting) {
+          e.inicio = Date.now();
+        } else if (e.inicio) {
+          e.acumulado += (Date.now() - e.inicio) / 1000;
+          e.inicio = null;
+        }
+      });
+    }, { threshold: 0.5 });
+    secoes.forEach(function (s) { observer.observe(s); });
+
+    function enviarTempos() {
+      Object.keys(estado).forEach(function (nome) {
+        var e = estado[nome];
+        if (e.inicio) {
+          e.acumulado += (Date.now() - e.inicio) / 1000;
+          e.inicio = null;
+        }
+        if (e.acumulado >= 1) {
+          var segundos = Math.round(e.acumulado);
+          track('tempo_secao', nome + ': ' + segundos + 's', { secao: nome, segundos: segundos });
+          e.acumulado = 0;
+        }
+      });
+    }
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') enviarTempos();
+    });
+  }
+
+  // ---------- Info do dispositivo/navegador (uma vez por visita) ----------
+  // `userAgentData.getHighEntropyValues` (Client Hints) só existe em
+  // navegadores Chromium (Chrome/Edge/Samsung Internet) e é o único jeito de
+  // pegar o modelo real do aparelho Android; no Safari/iOS e Firefox não tem
+  // equivalente — nesses casos fica só o user-agent genérico mesmo.
+  function iniciarDeviceInfo() {
+    function resumo(modelo, plataforma) {
+      var partes = [];
+      if (plataforma) partes.push(plataforma);
+      if (modelo) partes.push(modelo);
+      partes.push(screen.width + 'x' + screen.height);
+      partes.push(navigator.language);
+      return partes.join(' · ');
+    }
+    function enviar(modelo, plataforma) {
+      track('device_info', resumo(modelo, plataforma), {
+        modelo: modelo || '(nao disponivel)',
+        plataforma: plataforma || '(nao disponivel)',
+        ua: navigator.userAgent,
+        tela: screen.width + 'x' + screen.height,
+        dpr: window.devicePixelRatio,
+        touch: ('ontouchstart' in window) ? 'sim' : 'nao',
+        idioma: navigator.language
+      });
+    }
+    if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+      navigator.userAgentData.getHighEntropyValues(['model', 'platform', 'platformVersion'])
+        .then(function (alta) {
+          enviar(alta.model, [alta.platform, alta.platformVersion].filter(Boolean).join(' '));
+        })
+        .catch(function () { enviar('', ''); });
+    } else {
+      enviar('', '');
+    }
   }
 
   // ---------- Ripple ao clicar nos botões CTA ----------
@@ -362,6 +468,8 @@
   document.addEventListener('DOMContentLoaded', function () {
     iniciarGA4();
     carregarConfig();
+    iniciarDeviceInfo();
+    iniciarTempoPorSecao();
     iniciarFlipbookLazy();
     iniciarTrackingCliques();
     iniciarScrollReveal();
