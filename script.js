@@ -61,163 +61,24 @@
     document.querySelectorAll('.pre-venda-only').forEach(function (el) { el.hidden = !dados.preVendaAtiva; });
   }
 
-  // ---------- Efeito de virar página (StPageFlip) ----------
-  // A lib (page-flip) carrega com `defer` para não atrasar a primeira tela;
-  // só inicializamos de fato quando a seção da crônica estiver perto da tela
-  // E a lib já tiver terminado de carregar — o que vier depois dispara.
-  // (Antes isso era um polling com limite de 2s: em conexão lenta a lib podia
-  // ainda não ter chegado, o limite estourava e o livro nunca aparecia.)
-  var libPronta = false;
-  var libCallbacks = [];
-  function quandoLibPronta_(cb) {
-    if (libPronta) { cb(); } else { libCallbacks.push(cb); }
-  }
-  var libScript = document.getElementById('page-flip-lib');
-  if (libScript) {
-    libScript.addEventListener('load', function () {
-      libPronta = true;
-      libCallbacks.forEach(function (cb) { cb(); });
-      libCallbacks = [];
-    });
-  }
-
-  function iniciarFlipbookLazy() {
-    var secao = document.querySelector('.cronica-intro');
-    if (!secao) return;
-    if (!window.IntersectionObserver) { quandoLibPronta_(iniciarFlipbook); return; }
-    var observer = new IntersectionObserver(function (entradas) {
-      entradas.forEach(function (entrada) {
-        if (entrada.isIntersecting) {
-          quandoLibPronta_(iniciarFlipbook);
-          observer.unobserve(entrada.target);
-        }
-      });
-    }, { rootMargin: '600px 0px' });
-    observer.observe(secao);
-  }
-
-  // Monta as páginas de uma crônica automaticamente: mede o espaço real
-  // disponível e vai encaixando parágrafos até que o próximo não caiba mais,
-  // abrindo uma nova página nesse ponto. Cada crônica sempre começa em uma
-  // página nova (o título nunca fica "grudado" no fim da anterior).
-  function paginarCronicas_(larguraPagina, alturaPagina) {
-    var medidor = document.createElement('div');
-    medidor.className = 'flipbook-pagina';
-    medidor.style.position = 'fixed';
-    medidor.style.visibility = 'hidden';
-    medidor.style.left = '-9999px';
-    medidor.style.top = '0';
-    medidor.style.width = larguraPagina + 'px';
-    medidor.style.height = 'auto';
-    medidor.style.overflow = 'visible';
-    document.body.appendChild(medidor);
-
-    function cabe(nos) {
-      medidor.innerHTML = '';
-      nos.forEach(function (n) { medidor.appendChild(n.cloneNode(true)); });
-      return medidor.scrollHeight <= alturaPagina;
-    }
-
-    var paginas = [];
-    var atual = [];
-
-    function fecharPagina() {
-      if (atual.length) paginas.push(atual);
-      atual = [];
-    }
-
-    document.querySelectorAll('#cronicas-fonte .cronica-fonte').forEach(function (cronica) {
-      fecharPagina(); // cada crônica começa numa página nova
-
-      var titulo = document.createElement('h3');
-      titulo.textContent = cronica.getAttribute('data-titulo');
-      var marca = document.createElement('p');
-      marca.className = 'flipbook-marca';
-      marca.setAttribute('aria-hidden', 'true');
-      marca.textContent = '❋';
-
-      var blocos = [titulo, marca].concat(Array.from(cronica.querySelectorAll('p')));
-
-      blocos.forEach(function (bloco) {
-        var candidato = atual.concat([bloco]);
-        if (atual.length > 0 && !cabe(candidato)) {
-          fecharPagina();
-          atual = [bloco];
-        } else {
-          atual = candidato;
-        }
-      });
-    });
-    fecharPagina();
-
-    medidor.remove();
-    return paginas;
-  }
-
-  function iniciarFlipbook() {
-    var container = document.getElementById('flipbook');
-    if (!container || !window.St) return;
-
-    // A própria lib deveria evitar que o toque no livro role a página
-    // (mobileScrollSupport, ligado por padrão), mas isso tem um bug conhecido
-    // e sem correção (github.com/Nodlik/StPageFlip issue #38): o navegador
-    // chega a começar a rolar antes da lib reagir ao gesto. Bloqueamos a
-    // rolagem nativa por conta própria, direto no touchmove, como reforço.
-    container.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
-
-    // Largura útil da página (a mesma coluna de conteúdo, até 480px), calculada
-    // aqui em vez de deixar a lib decidir — evita que ela escolha um tamanho
-    // maior que a tela disponível (causa overflow horizontal).
-    var largura = Math.max(Math.min(container.parentElement.clientWidth, 480), 240);
-    var altura = Math.round(largura * 1.5);
-    // A lib estica o livro para caber o espaço do pai mesmo com size:'fixed';
-    // travamos esse espaço no tamanho calculado para ela não crescer além disso.
-    container.parentElement.style.maxWidth = largura + 'px';
-
-    // O medidor usa a própria classe .flipbook-pagina (mesmo padding, mesma
-    // fonte) com box-sizing:border-box — largura/altura totais já bastam,
-    // não subtrair o padding aqui de novo (senão ele é descontado 2x).
-    var paginasTexto = paginarCronicas_(largura, altura);
-    paginasTexto.forEach(function (nos) {
-      var pagina = document.createElement('div');
-      pagina.className = 'flipbook-pagina';
-      nos.forEach(function (n) { pagina.appendChild(n); });
-      container.appendChild(pagina);
-    });
-
-    var pageFlip = new St.PageFlip(container, {
-      width: largura,
-      height: altura,
-      size: 'fixed',
-      maxShadowOpacity: 0.4,
-      showCover: false,
-      usePortrait: true,
-      mobileScrollSupport: true,
-      // Exige um arraste mais deliberado antes de virar a página — evita que
-      // um toque leve ou o início de um scroll vertical seja lido como flip.
-      swipeDistance: 45
-    });
-
-    pageFlip.loadFromHTML(document.querySelectorAll('#flipbook .flipbook-pagina'));
-
-    var total = pageFlip.getPageCount();
-    document.getElementById('pagina-total').textContent = total;
-
-    var abriu = false;
-    var terminou = false;
-
-    var paginaAnterior = 1;
-    pageFlip.on('flip', function (e) {
-      var atual = e.data + 1;
-      document.getElementById('pagina-atual').textContent = atual;
-      esconderDicaArrastar();
-
-      if (!abriu) { abriu = true; track('chronicle_open'); }
-      track('chronicle_page_turn', 'pagina ' + atual + ' de ' + total, {
-        pagina: atual, total_paginas: total, direcao: atual > paginaAnterior ? 'avancar' : 'voltar'
-      });
-      paginaAnterior = atual;
-      if (!terminou && atual >= total) { terminou = true; track('chronicle_completed'); }
+  // ---------- Livro folheável (iframe isolado — ver flipbook.js) ----------
+  // Roda isolado de propósito, num <iframe>: evita um bug sem correção
+  // oficial da lib (page-flip) de rolagem automática da página ao virar no
+  // celular (github.com/Nodlik/StPageFlip issue #38). A página principal só
+  // dimensiona o iframe (altura calculada lá dentro) e repassa os eventos de
+  // analytics pro GA4/planilha que já estão configurados aqui.
+  function iniciarFlipbookFrame() {
+    var frame = document.getElementById('flipbook-frame');
+    if (!frame) return;
+    window.addEventListener('message', function (evento) {
+      if (evento.origin !== window.location.origin) return;
+      var dados = evento.data;
+      if (!dados || dados.origem !== 'linguaruda-flipbook') return;
+      if (dados.tipo === 'altura') {
+        frame.style.height = dados.altura + 'px';
+      } else if (dados.tipo === 'evento') {
+        track(dados.nome, dados.detalhe, dados.extra);
+      }
     });
   }
 
@@ -453,12 +314,6 @@
     });
   }
 
-  // ---------- Dica de arrastar na crônica ----------
-  function esconderDicaArrastar() {
-    var dica = document.getElementById('dica-arrastar');
-    if (dica) dica.classList.add('escondida');
-  }
-
   // ---------- Clique nos botões de WhatsApp ----------
   function iniciarTrackingCliques() {
     document.querySelectorAll('[data-secao-cta]').forEach(function (link) {
@@ -473,7 +328,7 @@
     carregarConfig();
     iniciarDeviceInfo();
     iniciarTempoPorSecao();
-    iniciarFlipbookLazy();
+    iniciarFlipbookFrame();
     iniciarTrackingCliques();
     iniciarScrollReveal();
     iniciarParallax();

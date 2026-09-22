@@ -355,6 +355,19 @@ img { max-width: 100%; display: block; }
 /* ---------- CRÔNICA / PAGE-FLIP ---------- */
 .cronica-intro { text-align: center; }
 
+/* O livro (flipbook.html) roda isolado num iframe — ver comentário em
+   iniciarFlipbookFrame() em script.js. A altura é ajustada via JS (mensagem
+   do iframe) assim que o livro sabe seu tamanho real; o aspect-ratio abaixo
+   é só uma estimativa pra não pular de layout antes disso acontecer. */
+.flipbook-frame {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  border: none;
+  aspect-ratio: 1 / 1.65;
+}
+
 .flipbook-wrap {
   display: flex;
   justify-content: center;
