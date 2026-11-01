@@ -38,29 +38,6 @@
     try { fetch(url, { mode: 'no-cors' }); } catch (err) {}
   }
 
-  // ---------- Config dinâmica (status da pré-venda) ----------
-  // Via JSONP (script tag) em vez de fetch — funciona independente de CORS,
-  // já que o Apps Script está em outro domínio. A página já renderiza com o
-  // preço/benefício de pré-venda visíveis por padrão (caso mais comum); essa
-  // chamada só corrige caso a pré-venda já tenha encerrado.
-  function carregarConfig() {
-    var cbNome = 'linguarudaConfig_' + Date.now();
-    window[cbNome] = function (dados) {
-      aplicarConfig(dados);
-      delete window[cbNome];
-      tag.remove();
-    };
-    var tag = document.createElement('script');
-    tag.src = API_BASE_URL + '?action=config&callback=' + cbNome;
-    document.body.appendChild(tag);
-  }
-
-  function aplicarConfig(dados) {
-    document.querySelectorAll('[data-preco-atual]').forEach(function (el) { el.textContent = dados.preco; });
-    document.querySelectorAll('[data-preco-lancamento]').forEach(function (el) { el.textContent = dados.precoLancamento; });
-    document.querySelectorAll('.pre-venda-only').forEach(function (el) { el.hidden = !dados.preVendaAtiva; });
-  }
-
   // ---------- Livro folheável (iframe isolado — ver flipbook.js) ----------
   // Roda isolado de propósito, num <iframe>: evita um bug sem correção
   // oficial da lib (page-flip) de rolagem automática da página ao virar no
@@ -325,7 +302,6 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     iniciarGA4();
-    carregarConfig();
     iniciarDeviceInfo();
     iniciarTempoPorSecao();
     iniciarFlipbookFrame();

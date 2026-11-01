@@ -110,12 +110,6 @@ img { max-width: 100%; display: block; }
   color: var(--amarelo);
 }
 
-.preco-box__antigo {
-  font-size: 15px;
-  text-decoration: line-through;
-  color: var(--sombra-riscado);
-}
-
 .countdown {
   font-size: 13px;
   color: var(--sombra-riscado);
@@ -594,9 +588,6 @@ img { max-width: 100%; display: block; }
 .dica-arrastar.escondida {
   opacity: 0;
 }
-
-/* ---------- Elementos exclusivos da pré-venda ativa ---------- */
-.pre-venda-only[hidden] { display: none; }
 
 /* ---------- CENÁRIO DE FUNDO (telas largas) ---------- */
 .fundo-decorativo {
